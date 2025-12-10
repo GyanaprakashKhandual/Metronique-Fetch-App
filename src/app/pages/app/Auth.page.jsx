@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { Mail, Lock, User, Eye, EyeOff, ArrowLeft, ArrowRight } from 'lucide-react';
 import { FaGithub } from 'react-icons/fa';
 
-const API_BASE_URL = 'http://localhost:5000/api/v1';
+const API_BASE_URL = 'http://localhost:5000/api/v1/auth';
 
 const Spinner = () => (
   <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
@@ -43,68 +43,30 @@ export default function AuthPage() {
   });
 
   useEffect(() => {
-    checkIfLoggedIn();
-    handleOAuthCallback(); // Handle OAuth callback on page load
-  }, [router]);
+    checkAuthStatus();
+  }, []);
 
   const showAlert = ({ type, message }) => {
     setAlert({ show: true, type, message });
     setTimeout(() => setAlert({ show: false, type: '', message: '' }), 5000);
   };
 
-  const checkIfLoggedIn = async () => {
-    const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
-
-    if (token) {
-      try {
-        const res = await fetch(`${API_BASE_URL}/auth/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-          credentials: 'include'
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success) {
-            router.push('/app');
-          }
-        } else {
-          localStorage.removeItem('token');
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-        }
-      } catch (err) {
-        console.error('Token validation error:', err);
-        localStorage.removeItem('token');
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-      }
-    }
-  };
-
-  // Handle OAuth callback after redirect from backend
-  const handleOAuthCallback = async () => {
+  const checkAuthStatus = async () => {
     try {
-      // Fetch user data - cookies are automatically sent
-      const res = await fetch(`${API_BASE_URL}/auth/me`, {
+      const res = await fetch(`${API_BASE_URL}/me`, {
+        method: 'GET',
         credentials: 'include'
       });
 
       if (res.ok) {
         const data = await res.json();
-        if (data.success && data.data.user) {
-          console.log('[OAuth] Authenticated, user:', data.data.user);
-          
-          // Store user data
-          localStorage.setItem('user', JSON.stringify(data.data.user));
-          
-          // Redirect to app
-          setTimeout(() => {
-            router.push('/app');
-          }, 300);
+        if (data.success) {
+          console.log('[Auth] User already logged in, redirecting to /app');
+          router.push('/app');
         }
       }
     } catch (error) {
-      console.log('[Auth] Normal page load');
+      console.log('[Auth] No active session');
     }
   };
 
@@ -127,6 +89,7 @@ export default function AuthPage() {
   };
 
   const handleRegister = async () => {
+    console.log('[Auth] Registration attempt:', formData.email);
     setLoading(true);
 
     if (formData.password !== formData.confirmPassword) {
@@ -148,7 +111,7 @@ export default function AuthPage() {
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/register`, {
+      const res = await fetch(`${API_BASE_URL}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -165,20 +128,16 @@ export default function AuthPage() {
       const data = await res.json();
 
       if (data.success) {
-        // Store tokens
-        localStorage.setItem('accessToken', data.data.accessToken || data.data.token);
-        if (data.data.refreshToken) {
-          localStorage.setItem('refreshToken', data.data.refreshToken);
-        }
-        localStorage.setItem('user', JSON.stringify(data.data.user));
-
+        console.log('[Auth] Registration successful:', formData.email);
         setRegistrationEmail(formData.email);
         setShowEmailVerification(true);
         showAlert({ type: 'success', message: 'Account created successfully! Please verify your email.' });
       } else {
+        console.warn('[Auth] Registration failed:', data.message);
         showAlert({ type: 'error', message: data.message || 'Registration failed' });
       }
     } catch (err) {
+      console.error('[Auth] Registration error:', err);
       showAlert({ type: 'error', message: 'Network error. Please try again.' });
     } finally {
       setLoading(false);
@@ -186,6 +145,7 @@ export default function AuthPage() {
   };
 
   const handleLogin = async () => {
+    console.log('[Auth] Login attempt:', formData.email);
     setLoading(true);
 
     if (!formData.email || !formData.password) {
@@ -195,7 +155,7 @@ export default function AuthPage() {
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/login`, {
+      const res = await fetch(`${API_BASE_URL}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -208,22 +168,18 @@ export default function AuthPage() {
       const data = await res.json();
 
       if (data.success) {
-        // Store tokens
-        localStorage.setItem('accessToken', data.data.accessToken || data.data.token);
-        if (data.data.refreshToken) {
-          localStorage.setItem('refreshToken', data.data.refreshToken);
-        }
-        localStorage.setItem('user', JSON.stringify(data.data.user));
-
+        console.log('[Auth] Login successful:', formData.email);
         showAlert({ type: 'success', message: 'Welcome back! Redirecting...' });
 
         setTimeout(() => {
           router.push('/app');
         }, 1000);
       } else {
+        console.warn('[Auth] Login failed:', data.message);
         showAlert({ type: 'error', message: data.message || 'Login failed' });
       }
     } catch (err) {
+      console.error('[Auth] Login error:', err);
       showAlert({ type: 'error', message: 'Network error. Please try again.' });
     } finally {
       setLoading(false);
@@ -231,6 +187,7 @@ export default function AuthPage() {
   };
 
   const handleMagicLink = async () => {
+    console.log('[Auth] Magic link request:', formData.email);
     setLoading(true);
 
     if (!formData.email) {
@@ -240,7 +197,7 @@ export default function AuthPage() {
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/send-verification-link`, {
+      const res = await fetch(`${API_BASE_URL}/send-verification-link`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -250,13 +207,16 @@ export default function AuthPage() {
       const data = await res.json();
 
       if (data.success) {
+        console.log('[Auth] Magic link sent:', formData.email);
         showAlert({ type: 'success', message: 'Magic link sent! Check your email.' });
         setMode('login');
         setFormData({ firstName: '', lastName: '', email: '', password: '', confirmPassword: '', username: '' });
       } else {
+        console.warn('[Auth] Magic link failed:', data.message);
         showAlert({ type: 'error', message: data.message || 'Failed to send magic link' });
       }
     } catch (err) {
+      console.error('[Auth] Magic link error:', err);
       showAlert({ type: 'error', message: 'Network error. Please try again.' });
     } finally {
       setLoading(false);
@@ -264,6 +224,7 @@ export default function AuthPage() {
   };
 
   const handleForgotPassword = async () => {
+    console.log('[Auth] Forgot password request:', formData.email);
     setLoading(true);
 
     if (!formData.email) {
@@ -273,7 +234,7 @@ export default function AuthPage() {
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+      const res = await fetch(`${API_BASE_URL}/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -283,23 +244,25 @@ export default function AuthPage() {
       const data = await res.json();
 
       if (data.success) {
+        console.log('[Auth] Password reset link sent:', formData.email);
         showAlert({ type: 'success', message: 'Password reset link sent to your email!' });
         setMode('login');
         setFormData({ firstName: '', lastName: '', email: '', password: '', confirmPassword: '', username: '' });
       } else {
+        console.warn('[Auth] Password reset failed:', data.message);
         showAlert({ type: 'error', message: data.message || 'Failed to send reset link' });
       }
     } catch (err) {
+      console.error('[Auth] Password reset error:', err);
       showAlert({ type: 'error', message: 'Network error. Please try again.' });
     } finally {
       setLoading(false);
     }
   };
 
-  // OAuth handler - redirects to backend OAuth endpoint
   const handleOAuth = (provider) => {
-    console.log(`[OAuth] Starting ${provider} authentication`);
-    window.location.href = `${API_BASE_URL}/auth/${provider}`;
+    console.log(`[Auth] Initiating ${provider} OAuth`);
+    window.location.href = `${API_BASE_URL}/${provider}`;
   };
 
   const switchMode = (newMode) => {

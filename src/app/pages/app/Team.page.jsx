@@ -5,7 +5,8 @@ import {
     Plus, Users, FileText, Settings, LogOut, Upload, Download,
     Trash2, Edit, Eye, Search, Filter, ChevronDown, AlertCircle,
     CheckCircle, Loader, X, Copy, Share2, MoreVertical, FolderOpen,
-    FileIcon, Image, Music, Video, Archive, Database
+    FileIcon, Image, Music, Video, Archive, Database, Mail, User,
+    Lock, Globe, CheckSquare, Square
 } from 'lucide-react';
 
 const API_BASE_TEAM = 'http://localhost:5000/api/v1/team';
@@ -20,11 +21,10 @@ const TeamPage = () => {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [showModal, setShowModal] = useState(false);
-    const [modalType, setModalType] = useState('createTeam');
+    const [modalType, setModalType] = useState('');
     const [formData, setFormData] = useState({});
     const [searchTerm, setSearchTerm] = useState('');
     const [uploadProgress, setUploadProgress] = useState(0);
-    const [selectedFiles, setSelectedFiles] = useState([]);
     const [teamMembers, setTeamMembers] = useState([]);
     const [isUploading, setIsUploading] = useState(false);
     const [stats, setStats] = useState({
@@ -32,23 +32,26 @@ const TeamPage = () => {
         totalSize: '0 KB',
         byType: {}
     });
-
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : '';
+    const [invitations, setInvitations] = useState([]);
+    const [selectedMember, setSelectedMember] = useState(null);
 
     const headers = {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
     };
 
-    // Fetch Teams
     const fetchTeams = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`${API_BASE_TEAM}/my-teams`, { headers });
+            const res = await fetch(`${API_BASE_TEAM}/my-teams`, {
+                headers,
+                credentials: 'include'
+            });
             const data = await res.json();
             if (data.success) {
                 setTeams(data.data.teams || []);
-                if (data.data.teams?.length > 0) setSelectedTeam(data.data.teams[0]);
+                if (data.data.teams?.length > 0 && !selectedTeam) {
+                    setSelectedTeam(data.data.teams[0]);
+                }
             }
         } catch (err) {
             setError('Failed to fetch teams');
@@ -56,11 +59,13 @@ const TeamPage = () => {
         setLoading(false);
     };
 
-    // Fetch Files
     const fetchFiles = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`${API_BASE_FILE}/files`, { headers });
+            const res = await fetch(`${API_BASE_FILE}/files`, {
+                headers,
+                credentials: 'include'
+            });
             const data = await res.json();
             if (data.success) setFiles(data.data.files || []);
         } catch (err) {
@@ -70,22 +75,24 @@ const TeamPage = () => {
     };
 
     useEffect(() => {
-        if (token) {
-            fetchTeams();
-            fetchFiles();
-        }
-    }, [token]);
+        fetchTeams();
+        fetchFiles();
+    }, []);
 
-    // Create Team
     const handleCreateTeam = async () => {
+        if (!formData.teamName?.trim()) {
+            setError('Team name is required');
+            return;
+        }
         setLoading(true);
         try {
             const res = await fetch(`${API_BASE_TEAM}`, {
                 method: 'POST',
                 headers,
+                credentials: 'include',
                 body: JSON.stringify({
                     name: formData.teamName,
-                    description: formData.teamDescription,
+                    description: formData.teamDescription || '',
                     settings: { visibility: formData.visibility || 'private' }
                 })
             });
@@ -95,6 +102,8 @@ const TeamPage = () => {
                 setShowModal(false);
                 setFormData({});
                 fetchTeams();
+            } else {
+                setError(data.message || 'Failed to create team');
             }
         } catch (err) {
             setError('Failed to create team');
@@ -102,17 +111,21 @@ const TeamPage = () => {
         setLoading(false);
     };
 
-    // Update Team
     const handleUpdateTeam = async () => {
-        if (!selectedTeam) return;
+        if (!selectedTeam || !formData.teamName?.trim()) {
+            setError('Team name is required');
+            return;
+        }
         setLoading(true);
         try {
             const res = await fetch(`${API_BASE_TEAM}/${selectedTeam._id}`, {
                 method: 'PUT',
                 headers,
+                credentials: 'include',
                 body: JSON.stringify({
-                    name: formData.teamName || selectedTeam.name,
-                    description: formData.teamDescription || selectedTeam.description
+                    name: formData.teamName,
+                    description: formData.teamDescription || '',
+                    settings: selectedTeam.settings || {}
                 })
             });
             const data = await res.json();
@@ -120,6 +133,8 @@ const TeamPage = () => {
                 setSuccess('Team updated successfully!');
                 setShowModal(false);
                 fetchTeams();
+            } else {
+                setError(data.message || 'Failed to update team');
             }
         } catch (err) {
             setError('Failed to update team');
@@ -127,19 +142,21 @@ const TeamPage = () => {
         setLoading(false);
     };
 
-    // Delete Team
     const handleDeleteTeam = async (teamId) => {
         if (!window.confirm('Are you sure? This action cannot be undone.')) return;
         setLoading(true);
         try {
             const res = await fetch(`${API_BASE_TEAM}/${teamId}`, {
                 method: 'DELETE',
-                headers
+                headers,
+                credentials: 'include'
             });
             const data = await res.json();
             if (data.success) {
                 setSuccess('Team deleted successfully!');
                 fetchTeams();
+            } else {
+                setError(data.message || 'Failed to delete team');
             }
         } catch (err) {
             setError('Failed to delete team');
@@ -147,313 +164,21 @@ const TeamPage = () => {
         setLoading(false);
     };
 
-    // Upload Files
-    const handleFileUpload = async (e) => {
-        const fileList = e.target.files;
-        if (!fileList) return;
-
-        setLoading(true);
-        for (let i = 0; i < fileList.length; i++) {
-            const file = fileList[i];
-            const formDataUpload = new FormData();
-            formDataUpload.append('file', file);
-
-            try {
-                const res = await fetch(`${API_BASE_FILE}/upload`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}` },
-                    body: formDataUpload
-                });
-                const data = await res.json();
-                if (data.success) {
-                    setUploadProgress(((i + 1) / fileList.length) * 100);
-                }
-            } catch (err) {
-                setError(`Failed to upload ${file.name}`);
-            }
-        }
-        setSuccess('Files uploaded successfully!');
-        setUploadProgress(0);
-        setLoading(false);
-        fetchFiles();
-    };
-
-    // Delete File
-    const handleDeleteFile = async (fileId) => {
-        if (!window.confirm('Delete this file?')) return;
-        try {
-            const res = await fetch(`${API_BASE_FILE}/delete/${fileId}`, {
-                method: 'DELETE',
-                headers
-            });
-            const data = await res.json();
-            if (data.success) {
-                setSuccess('File deleted!');
-                fetchFiles();
-            }
-        } catch (err) {
-            setError('Failed to delete file');
-        }
-    };
-
-    // Invite Member
-    const handleInviteMember = async () => {
-        if (!selectedTeam) return;
-        setLoading(true);
-        try {
-            const res = await fetch(`${API_BASE_TEAM}/${selectedTeam._id}/invitations`, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({
-                    email: formData.memberEmail,
-                    role: formData.memberRole || 'member'
-                })
-            });
-            const data = await res.json();
-            if (data.success) {
-                setSuccess('Invitation sent successfully!');
-                setShowModal(false);
-                setFormData({});
-            }
-        } catch (err) {
-            setError('Failed to send invitation');
-        }
-        setLoading(false);
-    };
-
-    // Team Members Management
-    const fetchTeamMembers = async (teamId) => {
-        setLoading(true);
-        try {
-            const res = await fetch(`${API_BASE_TEAM}/${teamId}/members`, { headers });
-            const data = await res.json();
-            if (data.success) {
-                setTeamMembers(data.data.members || []);
-            }
-        } catch (err) {
-            setError('Failed to fetch team members');
-        }
-        setLoading(false);
-    };
-
-    // Remove Member
-    const handleRemoveMember = async (teamId, memberId) => {
-        if (!window.confirm('Remove this member from team?')) return;
-        setLoading(true);
-        try {
-            const res = await fetch(`${API_BASE_TEAM}/${teamId}/members/${memberId}`, {
-                method: 'DELETE',
-                headers
-            });
-            const data = await res.json();
-            if (data.success) {
-                setSuccess('Member removed successfully!');
-                if (selectedTeam) fetchTeamMembers(selectedTeam._id);
-            }
-        } catch (err) {
-            setError('Failed to remove member');
-        }
-        setLoading(false);
-    };
-
-    // Update Member Role
-    const handleUpdateMemberRole = async (teamId, memberId) => {
-        if (!selectedTeam || !formData.memberRole) return;
-        setLoading(true);
-        try {
-            const res = await fetch(`${API_BASE_TEAM}/${teamId}/members/${memberId}/role`, {
-                method: 'PUT',
-                headers,
-                body: JSON.stringify({ role: formData.memberRole })
-            });
-            const data = await res.json();
-            if (data.success) {
-                setSuccess('Member role updated!');
-                setShowModal(false);
-                fetchTeamMembers(teamId);
-            }
-        } catch (err) {
-            setError('Failed to update member role');
-        }
-        setLoading(false);
-    };
-
-    // Get File Stats
-    const fetchFileStats = async () => {
-        try {
-            const res = await fetch(`${API_BASE_FILE}/stats`, { headers });
-            const data = await res.json();
-            if (data.success) {
-                const statsData = data.data;
-                setStats({
-                    totalFiles: statsData.totalFiles || 0,
-                    totalSize: statsData.totalSizeFormatted || '0 KB',
-                    byType: statsData.byType || {}
-                });
-            }
-        } catch (err) {
-            console.log('Stats fetch error:', err);
-        }
-    };
-
-    // Get Files by Type
-    const fetchFilesByType = async (fileType) => {
-        setLoading(true);
-        try {
-            const res = await fetch(`${API_BASE_FILE}/files/type/${fileType}`, { headers });
-            const data = await res.json();
-            if (data.success) {
-                setFiles(data.data.files || []);
-            }
-        } catch (err) {
-            setError(`Failed to fetch ${fileType} files`);
-        }
-        setLoading(false);
-    };
-
-    // Delete Multiple Files
-    const handleDeleteMultipleFiles = async (fileIds) => {
-        if (!window.confirm(`Delete ${fileIds.length} files?`)) return;
-        setLoading(true);
-        try {
-            const res = await fetch(`${API_BASE_FILE}/delete-multiple`, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ fileIds })
-            });
-            const data = await res.json();
-            if (data.success) {
-                setSuccess(`${data.deleted} files deleted!`);
-                setSelectedFiles([]);
-                fetchFiles();
-            }
-        } catch (err) {
-            setError('Failed to delete files');
-        }
-        setLoading(false);
-    };
-
-    // Bulk Invite Members
-    const handleBulkInviteMembers = async () => {
-        if (!selectedTeam || !formData.bulkEmails) return;
-        setLoading(true);
-        try {
-            const emails = formData.bulkEmails.split(',').map(e => e.trim());
-            const invitations = emails.map(email => ({
-                email,
-                role: formData.memberRole || 'member'
-            }));
-
-            const res = await fetch(`${API_BASE_TEAM}/${selectedTeam._id}/invitations/bulk`, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ invitations })
-            });
-            const data = await res.json();
-            if (data.success) {
-                setSuccess('Bulk invitations sent!');
-                setShowModal(false);
-                setFormData({});
-            }
-        } catch (err) {
-            setError('Failed to send bulk invitations');
-        }
-        setLoading(false);
-    };
-
-    // Update Team Settings
-    const handleUpdateTeamSettings = async () => {
-        if (!selectedTeam) return;
-        setLoading(true);
-        try {
-            const res = await fetch(`${API_BASE_TEAM}/${selectedTeam._id}`, {
-                method: 'PUT',
-                headers,
-                body: JSON.stringify({
-                    settings: {
-                        visibility: formData.visibility,
-                        allowMemberInvites: formData.allowMemberInvites,
-                        requireApprovalForJoin: formData.requireApprovalForJoin,
-                        defaultMemberRole: formData.defaultMemberRole
-                    }
-                })
-            });
-            const data = await res.json();
-            if (data.success) {
-                setSuccess('Team settings updated!');
-                setShowModal(false);
-                fetchTeams();
-            }
-        } catch (err) {
-            setError('Failed to update settings');
-        }
-        setLoading(false);
-    };
-
-    // Get Team Invitations
-    const fetchTeamInvitations = async (teamId) => {
-        try {
-            const res = await fetch(`${API_BASE_TEAM}/${teamId}/invitations`, { headers });
-            const data = await res.json();
-            if (data.success) {
-                return data.data.invitations || [];
-            }
-        } catch (err) {
-            setError('Failed to fetch invitations');
-        }
-        return [];
-    };
-
-    // Resend Invitation
-    const handleResendInvitation = async (teamId, invitationId) => {
-        setLoading(true);
-        try {
-            const res = await fetch(`${API_BASE_TEAM}/${teamId}/invitations/${invitationId}/resend`, {
-                method: 'POST',
-                headers
-            });
-            const data = await res.json();
-            if (data.success) {
-                setSuccess('Invitation resent!');
-            }
-        } catch (err) {
-            setError('Failed to resend invitation');
-        }
-        setLoading(false);
-    };
-
-    // Cancel Invitation
-    const handleCancelInvitation = async (teamId, invitationId) => {
-        if (!window.confirm('Cancel this invitation?')) return;
-        setLoading(true);
-        try {
-            const res = await fetch(`${API_BASE_TEAM}/${teamId}/invitations/${invitationId}`, {
-                method: 'DELETE',
-                headers
-            });
-            const data = await res.json();
-            if (data.success) {
-                setSuccess('Invitation cancelled!');
-            }
-        } catch (err) {
-            setError('Failed to cancel invitation');
-        }
-        setLoading(false);
-    };
-
-    // Archive Team
     const handleArchiveTeam = async (teamId) => {
         if (!window.confirm('Archive this team? You can restore it later.')) return;
         setLoading(true);
         try {
             const res = await fetch(`${API_BASE_TEAM}/${teamId}/archive`, {
                 method: 'POST',
-                headers
+                headers,
+                credentials: 'include'
             });
             const data = await res.json();
             if (data.success) {
                 setSuccess('Team archived!');
                 fetchTeams();
+            } else {
+                setError(data.message || 'Failed to archive team');
             }
         } catch (err) {
             setError('Failed to archive team');
@@ -461,22 +186,7 @@ const TeamPage = () => {
         setLoading(false);
     };
 
-    // Get Team Stats
-    const fetchTeamStats = async (teamId) => {
-        try {
-            const res = await fetch(`${API_BASE_TEAM}/${teamId}/stats`, { headers });
-            const data = await res.json();
-            if (data.success) {
-                return data.data.stats;
-            }
-        } catch (err) {
-            console.log('Error fetching stats:', err);
-        }
-        return null;
-    };
-
-    // Enhanced File Upload with Progress
-    const handleEnhancedFileUpload = async (e) => {
+    const handleFileUpload = async (e) => {
         const fileList = e.target.files;
         if (!fileList) return;
 
@@ -492,7 +202,7 @@ const TeamPage = () => {
             try {
                 const res = await fetch(`${API_BASE_FILE}/upload`, {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}` },
+                    credentials: 'include',
                     body: formDataUpload
                 });
 
@@ -500,26 +210,51 @@ const TeamPage = () => {
                     const data = await res.json();
                     if (data.success) {
                         successCount++;
-                        setUploadProgress(Math.round(((i + 1) / fileList.length) * 100));
                     } else {
                         failureCount++;
                     }
+                } else {
+                    failureCount++;
                 }
+                setUploadProgress(Math.round(((i + 1) / fileList.length) * 100));
             } catch (err) {
                 failureCount++;
             }
         }
 
-        setSuccess(`${successCount} file(s) uploaded successfully!`);
+        if (successCount > 0) {
+            setSuccess(`${successCount} file(s) uploaded successfully!`);
+        }
         if (failureCount > 0) {
             setError(`${failureCount} file(s) failed to upload`);
         }
         setUploadProgress(0);
         setIsUploading(false);
-        fetchFiles();
+        setTimeout(() => fetchFiles(), 500);
     };
 
-    // Download File
+    const handleDeleteFile = async (fileId) => {
+        if (!window.confirm('Delete this file?')) return;
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_BASE_FILE}/delete/${fileId}`, {
+                method: 'DELETE',
+                headers,
+                credentials: 'include'
+            });
+            const data = await res.json();
+            if (data.success) {
+                setSuccess('File deleted!');
+                fetchFiles();
+            } else {
+                setError(data.message || 'Failed to delete file');
+            }
+        } catch (err) {
+            setError('Failed to delete file');
+        }
+        setLoading(false);
+    };
+
     const handleDownloadFile = async (fileUrl, fileName) => {
         try {
             const link = document.createElement('a');
@@ -534,7 +269,317 @@ const TeamPage = () => {
         }
     };
 
-    // Upgrade Subscription
+    const handleInviteMember = async () => {
+        if (!selectedTeam || !formData.memberEmail?.trim()) {
+            setError('Email is required');
+            return;
+        }
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_BASE_TEAM}/${selectedTeam._id}/invitations`, {
+                method: 'POST',
+                headers,
+                credentials: 'include',
+                body: JSON.stringify({
+                    email: formData.memberEmail,
+                    role: formData.memberRole || 'member',
+                    message: formData.inviteMessage || ''
+                })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setSuccess('Invitation sent successfully!');
+                setShowModal(false);
+                setFormData({});
+                fetchTeamMembers(selectedTeam._id);
+            } else {
+                setError(data.message || 'Failed to send invitation');
+            }
+        } catch (err) {
+            setError('Failed to send invitation');
+        }
+        setLoading(false);
+    };
+
+    const handleBulkInviteMembers = async () => {
+        if (!selectedTeam || !formData.bulkEmails?.trim()) {
+            setError('Emails are required');
+            return;
+        }
+        setLoading(true);
+        try {
+            const emails = formData.bulkEmails
+                .split(',')
+                .map(e => e.trim())
+                .filter(e => e);
+            const invitations = emails.map(email => ({
+                email,
+                role: formData.memberRole || 'member',
+                message: formData.inviteMessage || ''
+            }));
+
+            const res = await fetch(`${API_BASE_TEAM}/${selectedTeam._id}/invitations/bulk`, {
+                method: 'POST',
+                headers,
+                credentials: 'include',
+                body: JSON.stringify({ invitations })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setSuccess('Bulk invitations sent!');
+                setShowModal(false);
+                setFormData({});
+            } else {
+                setError(data.message || 'Failed to send bulk invitations');
+            }
+        } catch (err) {
+            setError('Failed to send bulk invitations');
+        }
+        setLoading(false);
+    };
+
+    const fetchTeamMembers = async (teamId) => {
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_BASE_TEAM}/${teamId}/members`, {
+                headers,
+                credentials: 'include'
+            });
+            const data = await res.json();
+            if (data.success) {
+                setTeamMembers(data.data.members || []);
+            }
+        } catch (err) {
+            setError('Failed to fetch team members');
+        }
+        setLoading(false);
+    };
+
+    const handleRemoveMember = async (teamId, memberId) => {
+        if (!window.confirm('Remove this member from team?')) return;
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_BASE_TEAM}/${teamId}/members/${memberId}`, {
+                method: 'DELETE',
+                headers,
+                credentials: 'include'
+            });
+            const data = await res.json();
+            if (data.success) {
+                setSuccess('Member removed successfully!');
+                fetchTeamMembers(teamId);
+            } else {
+                setError(data.message || 'Failed to remove member');
+            }
+        } catch (err) {
+            setError('Failed to remove member');
+        }
+        setLoading(false);
+    };
+
+    const handleUpdateMemberRole = async (teamId, memberId) => {
+        if (!selectedMember || !formData.memberRole) {
+            setError('Role is required');
+            return;
+        }
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_BASE_TEAM}/${teamId}/members/${memberId}/role`, {
+                method: 'PUT',
+                headers,
+                credentials: 'include',
+                body: JSON.stringify({ role: formData.memberRole })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setSuccess('Member role updated!');
+                setShowModal(false);
+                setSelectedMember(null);
+                fetchTeamMembers(teamId);
+            } else {
+                setError(data.message || 'Failed to update member role');
+            }
+        } catch (err) {
+            setError('Failed to update member role');
+        }
+        setLoading(false);
+    };
+
+    const handleUpdateMemberPermissions = async (teamId, memberId) => {
+        if (!selectedMember) return;
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_BASE_TEAM}/${teamId}/members/${memberId}/permissions`, {
+                method: 'PUT',
+                headers,
+                credentials: 'include',
+                body: JSON.stringify({ permissions: formData.permissions || {} })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setSuccess('Permissions updated!');
+                setShowModal(false);
+                setSelectedMember(null);
+                fetchTeamMembers(teamId);
+            } else {
+                setError(data.message || 'Failed to update permissions');
+            }
+        } catch (err) {
+            setError('Failed to update permissions');
+        }
+        setLoading(false);
+    };
+
+    const handleSuspendMember = async (teamId, memberId) => {
+        if (!window.confirm('Suspend this member?')) return;
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_BASE_TEAM}/${teamId}/members/${memberId}/suspend`, {
+                method: 'POST',
+                headers,
+                credentials: 'include'
+            });
+            const data = await res.json();
+            if (data.success) {
+                setSuccess('Member suspended!');
+                fetchTeamMembers(teamId);
+            } else {
+                setError(data.message || 'Failed to suspend member');
+            }
+        } catch (err) {
+            setError('Failed to suspend member');
+        }
+        setLoading(false);
+    };
+
+    const handleReactivateMember = async (teamId, memberId) => {
+        if (!window.confirm('Reactivate this member?')) return;
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_BASE_TEAM}/${teamId}/members/${memberId}/reactivate`, {
+                method: 'POST',
+                headers,
+                credentials: 'include'
+            });
+            const data = await res.json();
+            if (data.success) {
+                setSuccess('Member reactivated!');
+                fetchTeamMembers(teamId);
+            } else {
+                setError(data.message || 'Failed to reactivate member');
+            }
+        } catch (err) {
+            setError('Failed to reactivate member');
+        }
+        setLoading(false);
+    };
+
+    const fetchTeamInvitations = async (teamId) => {
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_BASE_TEAM}/${teamId}/invitations`, {
+                headers,
+                credentials: 'include'
+            });
+            const data = await res.json();
+            if (data.success) {
+                setInvitations(data.data.invitations || []);
+            }
+        } catch (err) {
+            setError('Failed to fetch invitations');
+        }
+        setLoading(false);
+    };
+
+    const handleResendInvitation = async (teamId, invitationId) => {
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_BASE_TEAM}/${teamId}/invitations/${invitationId}/resend`, {
+                method: 'POST',
+                headers,
+                credentials: 'include'
+            });
+            const data = await res.json();
+            if (data.success) {
+                setSuccess('Invitation resent!');
+            } else {
+                setError(data.message || 'Failed to resend invitation');
+            }
+        } catch (err) {
+            setError('Failed to resend invitation');
+        }
+        setLoading(false);
+    };
+
+    const handleCancelInvitation = async (teamId, invitationId) => {
+        if (!window.confirm('Cancel this invitation?')) return;
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_BASE_TEAM}/${teamId}/invitations/${invitationId}`, {
+                method: 'DELETE',
+                headers,
+                credentials: 'include'
+            });
+            const data = await res.json();
+            if (data.success) {
+                setSuccess('Invitation cancelled!');
+                fetchTeamInvitations(teamId);
+            } else {
+                setError(data.message || 'Failed to cancel invitation');
+            }
+        } catch (err) {
+            setError('Failed to cancel invitation');
+        }
+        setLoading(false);
+    };
+
+    const handleUpdateTeamSettings = async () => {
+        if (!selectedTeam) return;
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_BASE_TEAM}/${selectedTeam._id}/settings`, {
+                method: 'PUT',
+                headers,
+                credentials: 'include',
+                body: JSON.stringify({
+                    settings: {
+                        visibility: formData.visibility || 'private',
+                        allowMemberInvites: formData.allowMemberInvites || false,
+                        requireApprovalForJoin: formData.requireApprovalForJoin || false,
+                        defaultMemberRole: formData.defaultMemberRole || 'member'
+                    }
+                })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setSuccess('Team settings updated!');
+                setShowModal(false);
+                fetchTeams();
+            } else {
+                setError(data.message || 'Failed to update settings');
+            }
+        } catch (err) {
+            setError('Failed to update settings');
+        }
+        setLoading(false);
+    };
+
+    const fetchTeamStats = async (teamId) => {
+        try {
+            const res = await fetch(`${API_BASE_TEAM}/${teamId}/stats`, {
+                headers,
+                credentials: 'include'
+            });
+            const data = await res.json();
+            if (data.success) {
+                return data.data.stats;
+            }
+        } catch (err) {
+            console.error('Error fetching stats:', err);
+        }
+        return null;
+    };
+
     const handleUpgradeSubscription = async (plan, seats) => {
         if (!selectedTeam) return;
         setLoading(true);
@@ -542,12 +587,15 @@ const TeamPage = () => {
             const res = await fetch(`${API_BASE_TEAM}/${selectedTeam._id}/subscription/upgrade`, {
                 method: 'POST',
                 headers,
+                credentials: 'include',
                 body: JSON.stringify({ plan, seats })
             });
             const data = await res.json();
             if (data.success) {
                 setSuccess('Subscription upgraded!');
                 fetchTeams();
+            } else {
+                setError(data.message || 'Failed to upgrade subscription');
             }
         } catch (err) {
             setError('Failed to upgrade subscription');
@@ -555,54 +603,41 @@ const TeamPage = () => {
         setLoading(false);
     };
 
-    // Copy to Clipboard
-    const handleCopyToClipboard = (text) => {
-        navigator.clipboard.writeText(text);
-        setSuccess('Copied to clipboard!');
-    };
-
-    // Share Team Link
-    const handleShareTeam = async (teamId) => {
+    const handleShareTeam = (teamId) => {
         const shareUrl = `${window.location.origin}?team=${teamId}`;
-        handleCopyToClipboard(shareUrl);
-    };
-
-    // Filter and Search Enhanced
-    const getFilteredTeams = () => {
-        return teams.filter(t =>
-            t.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            t.description?.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-    };
-
-    const getFilteredFiles = () => {
-        let filtered = files.filter(f =>
-            f.filename?.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-
-        return filtered;
+        navigator.clipboard.writeText(shareUrl);
+        setSuccess('Team link copied to clipboard!');
     };
 
     useEffect(() => {
         if (selectedTeam) {
             fetchTeamMembers(selectedTeam._id);
-            fetchFileStats();
+            fetchTeamInvitations(selectedTeam._id);
+            fetchTeamStats(selectedTeam._id);
         }
     }, [selectedTeam]);
 
-    const openModal = (type) => {
+    const openModal = (type, data = null) => {
         setModalType(type);
+        if (data) setSelectedMember(data);
         setFormData({});
         setShowModal(true);
     };
 
     const filteredTeams = teams.filter(t =>
-        t.name?.toLowerCase().includes(searchTerm.toLowerCase())
+        t.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.description?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const filteredFiles = files.filter(f =>
         f.filename?.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
+    const filteredMembers = teamMembers.filter(m => {
+        const fullName = `${m.user?.firstName || ''} ${m.user?.lastName || ''}`.toLowerCase();
+        const email = m.user?.email?.toLowerCase() || '';
+        return fullName.includes(searchTerm.toLowerCase()) || email.includes(searchTerm.toLowerCase());
+    });
 
     const getFileIcon = (fileType) => {
         const icons = {
@@ -613,8 +648,7 @@ const TeamPage = () => {
             archive: Archive,
             database: Database
         };
-        const Icon = icons[fileType] || FileIcon;
-        return <Icon className="w-5 h-5" />;
+        return icons[fileType] || FileIcon;
     };
 
     const containerVariants = {
@@ -633,29 +667,36 @@ const TeamPage = () => {
                 return (
                     <>
                         <textarea
-                            placeholder="Enter emails separated by commas&#10;example@mail.com, user@mail.com"
+                            placeholder="Enter emails separated by commas"
                             value={formData.bulkEmails || ''}
                             onChange={(e) => setFormData({ ...formData, bulkEmails: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                            className="w-full px-4 py-2 border border-gray-700 bg-gray-800 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-black dark:bg-gray-700 dark:border-gray-600 resize-none"
                             rows="4"
                         />
                         <select
                             value={formData.memberRole || 'member'}
                             onChange={(e) => setFormData({ ...formData, memberRole: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            className="w-full px-4 py-2 border border-gray-700 bg-gray-800 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-black dark:bg-gray-700 dark:border-gray-600"
                         >
                             <option value="viewer">Viewer</option>
                             <option value="member">Member</option>
                             <option value="admin">Admin</option>
                         </select>
+                        <textarea
+                            placeholder="Optional message"
+                            value={formData.inviteMessage || ''}
+                            onChange={(e) => setFormData({ ...formData, inviteMessage: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-700 bg-gray-800 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-black dark:bg-gray-700 dark:border-gray-600 resize-none"
+                            rows="2"
+                        />
                     </>
                 );
             case 'updateMemberRole':
                 return (
                     <select
-                        value={formData.memberRole || 'member'}
+                        value={formData.memberRole || selectedMember?.role || 'member'}
                         onChange={(e) => setFormData({ ...formData, memberRole: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-2 border border-gray-700 bg-gray-800 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-black dark:bg-gray-700 dark:border-gray-600"
                     >
                         <option value="viewer">Viewer</option>
                         <option value="member">Member</option>
@@ -666,30 +707,30 @@ const TeamPage = () => {
                 return (
                     <>
                         <select
-                            value={formData.visibility || 'private'}
+                            value={formData.visibility || selectedTeam?.settings?.visibility || 'private'}
                             onChange={(e) => setFormData({ ...formData, visibility: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                            className="w-full px-4 py-2 border border-gray-700 bg-gray-800 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-black dark:bg-gray-700 dark:border-gray-600"
                         >
                             <option value="private">Private</option>
                             <option value="public">Public</option>
                         </select>
-                        <label className="flex items-center gap-2">
+                        <label className="flex items-center gap-3 cursor-pointer">
                             <input
                                 type="checkbox"
                                 checked={formData.allowMemberInvites || false}
                                 onChange={(e) => setFormData({ ...formData, allowMemberInvites: e.target.checked })}
-                                className="w-4 h-4"
+                                className="w-4 h-4 cursor-pointer"
                             />
-                            <span>Allow members to invite others</span>
+                            <span className="text-white dark:text-gray-200">Allow members to invite others</span>
                         </label>
-                        <label className="flex items-center gap-2">
+                        <label className="flex items-center gap-3 cursor-pointer">
                             <input
                                 type="checkbox"
                                 checked={formData.requireApprovalForJoin || false}
                                 onChange={(e) => setFormData({ ...formData, requireApprovalForJoin: e.target.checked })}
-                                className="w-4 h-4"
+                                className="w-4 h-4 cursor-pointer"
                             />
-                            <span>Require approval for join requests</span>
+                            <span className="text-white dark:text-gray-200">Require approval for join requests</span>
                         </label>
                     </>
                 );
@@ -699,17 +740,16 @@ const TeamPage = () => {
     };
 
     return (
-        <div className="min-h-screen bg-white text-black">
-            {/* Header */}
+        <div className="min-h-screen bg-white dark:bg-gray-900 text-black dark:text-white transition-colors duration-200">
             <motion.header
                 initial={{ y: -100 }}
                 animate={{ y: 0 }}
-                className="bg-white border-b border-gray-200 sticky top-0 z-50"
+                className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50"
             >
                 <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center">
-                            <Users className="w-6 h-6 text-white" />
+                        <div className="w-10 h-10 bg-black dark:bg-white rounded-lg flex items-center justify-center">
+                            <Users className="w-6 h-6 text-white dark:text-black" />
                         </div>
                         <h1 className="text-2xl font-bold">Team Hub</h1>
                     </div>
@@ -719,32 +759,37 @@ const TeamPage = () => {
                             placeholder="Search..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="px-4 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                            className="px-4 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-black dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white placeholder-gray-500 dark:placeholder-gray-400"
                         />
-                        <button
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
                             onClick={() => openModal('createTeam')}
-                            className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition flex items-center gap-2"
+                            className="bg-black dark:bg-white text-white dark:text-black px-4 py-2 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 transition flex items-center gap-2 font-medium"
                         >
                             <Plus className="w-5 h-5" /> New Team
-                        </button>
+                        </motion.button>
                     </div>
                 </div>
             </motion.header>
 
-            {/* Alerts */}
             <AnimatePresence>
                 {error && (
                     <motion.div
                         initial={{ x: 400 }}
                         animate={{ x: 0 }}
                         exit={{ x: 400 }}
-                        className="fixed top-24 right-6 bg-red-500 text-white px-6 py-3 rounded-lg flex items-center gap-3 z-40"
+                        className="fixed top-24 right-6 bg-red-600 dark:bg-red-700 text-white px-6 py-3 rounded-lg flex items-center gap-3 z-40 shadow-lg"
                     >
                         <AlertCircle className="w-5 h-5" />
                         {error}
-                        <button onClick={() => setError('')}>
+                        <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            onClick={() => setError('')}
+                            className="ml-2"
+                        >
                             <X className="w-4 h-4" />
-                        </button>
+                        </motion.button>
                     </motion.div>
                 )}
                 {success && (
@@ -752,31 +797,34 @@ const TeamPage = () => {
                         initial={{ x: 400 }}
                         animate={{ x: 0 }}
                         exit={{ x: 400 }}
-                        className="fixed top-24 right-6 bg-green-500 text-white px-6 py-3 rounded-lg flex items-center gap-3 z-40"
+                        className="fixed top-24 right-6 bg-green-600 dark:bg-green-700 text-white px-6 py-3 rounded-lg flex items-center gap-3 z-40 shadow-lg"
                     >
                         <CheckCircle className="w-5 h-5" />
                         {success}
-                        <button onClick={() => setSuccess('')}>
+                        <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            onClick={() => setSuccess('')}
+                            className="ml-2"
+                        >
                             <X className="w-4 h-4" />
-                        </button>
+                        </motion.button>
                     </motion.div>
                 )}
             </AnimatePresence>
 
             <div className="max-w-7xl mx-auto px-6 py-8">
-                {/* Tabs */}
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="flex gap-4 mb-8 border-b border-gray-200"
+                    className="flex gap-4 mb-8 border-b border-gray-200 dark:border-gray-700"
                 >
-                    {['overview', 'teams', 'files', 'members', 'settings'].map(tab => (
+                    {['overview', 'teams', 'files', 'members', 'invitations', 'settings'].map(tab => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
                             className={`pb-3 px-4 font-medium transition capitalize ${activeTab === tab
-                                ? 'border-b-2 border-green-500 text-green-600'
-                                : 'text-gray-600 hover:text-black'
+                                ? 'border-b-2 border-black dark:border-white text-black dark:text-white'
+                                : 'text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white'
                                 }`}
                         >
                             {tab}
@@ -784,72 +832,59 @@ const TeamPage = () => {
                     ))}
                 </motion.div>
 
-                {/* Content */}
                 <motion.div
                     key={activeTab}
-                    variants={containerVariants}
-                    initial="hidden"
-                    animate="visible"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.3 }}
                 >
-                    {/* Overview Tab */}
+
                     {activeTab === 'overview' && (
-                        <motion.div variants={containerVariants} className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <motion.div
-                                variants={itemVariants}
-                                className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-xl border border-green-200"
-                            >
+                        <motion.div variants={containerVariants} initial="hidden" animate="visible" className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <motion.div variants={itemVariants} className="bg-gray-50 dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700">
                                 <div className="flex justify-between items-start">
                                     <div>
-                                        <p className="text-gray-600 mb-2">Total Teams</p>
-                                        <h3 className="text-3xl font-bold text-green-600">{teams.length}</h3>
+                                        <p className="text-gray-600 dark:text-gray-400 mb-2">Total Teams</p>
+                                        <h3 className="text-3xl font-bold text-black dark:text-white">{teams.length}</h3>
                                     </div>
-                                    <Users className="w-10 h-10 text-green-600" />
+                                    <Users className="w-10 h-10 text-gray-400 dark:text-gray-600" />
                                 </div>
                             </motion.div>
 
-                            <motion.div
-                                variants={itemVariants}
-                                className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl border border-blue-200"
-                            >
+                            <motion.div variants={itemVariants} className="bg-gray-50 dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700">
                                 <div className="flex justify-between items-start">
                                     <div>
-                                        <p className="text-gray-600 mb-2">Total Files</p>
-                                        <h3 className="text-3xl font-bold text-blue-600">{files.length}</h3>
+                                        <p className="text-gray-600 dark:text-gray-400 mb-2">Total Members</p>
+                                        <h3 className="text-3xl font-bold text-black dark:text-white">{teamMembers.length}</h3>
                                     </div>
-                                    <FileText className="w-10 h-10 text-blue-600" />
+                                    <Users className="w-10 h-10 text-gray-400 dark:text-gray-600" />
                                 </div>
                             </motion.div>
 
-                            <motion.div
-                                variants={itemVariants}
-                                className="bg-gradient-to-br from-red-50 to-red-100 p-6 rounded-xl border border-red-200"
-                            >
+                            <motion.div variants={itemVariants} className="bg-gray-50 dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700">
                                 <div className="flex justify-between items-start">
                                     <div>
-                                        <p className="text-gray-600 mb-2">Active Members</p>
-                                        <h3 className="text-3xl font-bold text-red-600">
-                                            {teams.reduce((sum, t) => sum + (t.stats?.totalMembers || 0), 0)}
-                                        </h3>
+                                        <p className="text-gray-600 dark:text-gray-400 mb-2">Pending Invitations</p>
+                                        <h3 className="text-3xl font-bold text-black dark:text-white">{invitations.length}</h3>
                                     </div>
-                                    <Users className="w-10 h-10 text-red-600" />
+                                    <Mail className="w-10 h-10 text-gray-400 dark:text-gray-600" />
                                 </div>
                             </motion.div>
                         </motion.div>
                     )}
 
-                    {/* Teams Tab */}
                     {activeTab === 'teams' && (
-                        <motion.div variants={containerVariants} className="space-y-4">
+                        <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-4">
                             {loading ? (
                                 <div className="flex justify-center py-12">
                                     <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }}>
-                                        <Loader className="w-8 h-8 text-green-500" />
+                                        <Loader className="w-8 h-8 text-black dark:text-white" />
                                     </motion.div>
                                 </div>
                             ) : filteredTeams.length === 0 ? (
                                 <motion.div variants={itemVariants} className="text-center py-12">
-                                    <FolderOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                                    <p className="text-gray-500">No teams found</p>
+                                    <FolderOpen className="w-16 h-16 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
+                                    <p className="text-gray-500 dark:text-gray-400">No teams found</p>
                                 </motion.div>
                             ) : (
                                 filteredTeams.map(team => (
@@ -859,36 +894,44 @@ const TeamPage = () => {
                                         whileHover={{ x: 5 }}
                                         onClick={() => setSelectedTeam(team)}
                                         className={`p-6 rounded-xl border transition cursor-pointer ${selectedTeam?._id === team._id
-                                            ? 'border-green-500 bg-green-50'
-                                            : 'border-gray-200 bg-white hover:border-green-300'
+                                            ? 'border-black dark:border-white bg-gray-50 dark:bg-gray-800'
+                                            : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:border-gray-400 dark:hover:border-gray-600'
                                             }`}
                                     >
                                         <div className="flex justify-between items-start">
                                             <div>
-                                                <h3 className="text-lg font-bold text-black">{team.name}</h3>
-                                                <p className="text-gray-600 text-sm mt-1">{team.description}</p>
-                                                <div className="flex gap-4 mt-3 text-sm text-gray-500">
+                                                <h3 className="text-lg font-bold text-black dark:text-white">{team.name}</h3>
+                                                <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">{team.description}</p>
+                                                <div className="flex gap-4 mt-3 text-sm text-gray-500 dark:text-gray-400">
                                                     <span>👥 {team.stats?.totalMembers || 1} members</span>
                                                     <span>📊 {team.stats?.totalProjects || 0} projects</span>
-                                                    <span className="text-green-600">Plan: {team.subscription?.plan}</span>
+                                                    <span className="font-medium">Plan: {team.subscription?.plan || 'Free'}</span>
                                                 </div>
                                             </div>
                                             <div className="flex gap-2">
                                                 <motion.button
                                                     whileHover={{ scale: 1.1 }}
                                                     whileTap={{ scale: 0.95 }}
-                                                    onClick={() => openModal('editTeam')}
-                                                    className="p-2 hover:bg-blue-100 rounded-lg transition"
+                                                    onClick={(e) => { e.stopPropagation(); openModal('editTeam'); }}
+                                                    className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition"
                                                 >
-                                                    <Edit className="w-5 h-5 text-blue-500" />
+                                                    <Edit className="w-5 h-5 text-black dark:text-white" />
                                                 </motion.button>
                                                 <motion.button
                                                     whileHover={{ scale: 1.1 }}
                                                     whileTap={{ scale: 0.95 }}
-                                                    onClick={() => handleDeleteTeam(team._id)}
-                                                    className="p-2 hover:bg-red-100 rounded-lg transition"
+                                                    onClick={(e) => { e.stopPropagation(); handleDeleteTeam(team._id); }}
+                                                    className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition"
                                                 >
-                                                    <Trash2 className="w-5 h-5 text-red-500" />
+                                                    <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
+                                                </motion.button>
+                                                <motion.button
+                                                    whileHover={{ scale: 1.1 }}
+                                                    whileTap={{ scale: 0.95 }}
+                                                    onClick={(e) => { e.stopPropagation(); handleShareTeam(team._id); }}
+                                                    className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition"
+                                                >
+                                                    <Share2 className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                                                 </motion.button>
                                             </div>
                                         </div>
@@ -898,12 +941,11 @@ const TeamPage = () => {
                         </motion.div>
                     )}
 
-                    {/* Files Tab */}
                     {activeTab === 'files' && (
-                        <motion.div variants={containerVariants} className="space-y-6">
+                        <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-6">
                             <motion.div
                                 variants={itemVariants}
-                                className="border-2 border-dashed border-green-300 rounded-xl p-8 text-center hover:bg-green-50 transition"
+                                className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 text-center hover:bg-gray-50 dark:hover:bg-gray-800 transition"
                             >
                                 <input
                                     type="file"
@@ -913,21 +955,18 @@ const TeamPage = () => {
                                     id="file-upload"
                                 />
                                 <label htmlFor="file-upload" className="cursor-pointer">
-                                    <Upload className="w-12 h-12 text-green-500 mx-auto mb-3" />
-                                    <p className="text-gray-700 font-medium">Click to upload files</p>
-                                    <p className="text-gray-500 text-sm">or drag and drop</p>
+                                    <Upload className="w-12 h-12 text-gray-400 dark:text-gray-600 mx-auto mb-3" />
+                                    <p className="text-gray-700 dark:text-gray-300 font-medium">Click to upload files</p>
+                                    <p className="text-gray-500 dark:text-gray-400 text-sm">or drag and drop</p>
                                 </label>
                             </motion.div>
 
                             {uploadProgress > 0 && uploadProgress < 100 && (
-                                <motion.div
-                                    variants={itemVariants}
-                                    className="w-full bg-gray-200 rounded-full h-2 overflow-hidden"
-                                >
+                                <motion.div variants={itemVariants} className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                                     <motion.div
                                         initial={{ width: 0 }}
                                         animate={{ width: `${uploadProgress}%` }}
-                                        className="bg-green-500 h-full"
+                                        className="bg-black dark:bg-white h-full"
                                     />
                                 </motion.div>
                             )}
@@ -936,13 +975,13 @@ const TeamPage = () => {
                                 {loading ? (
                                     <div className="flex justify-center col-span-full py-12">
                                         <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }}>
-                                            <Loader className="w-8 h-8 text-blue-500" />
+                                            <Loader className="w-8 h-8 text-black dark:text-white" />
                                         </motion.div>
                                     </div>
                                 ) : filteredFiles.length === 0 ? (
                                     <motion.div variants={itemVariants} className="col-span-full text-center py-12">
-                                        <FileIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                                        <p className="text-gray-500">No files uploaded yet</p>
+                                        <FileIcon className="w-16 h-16 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
+                                        <p className="text-gray-500 dark:text-gray-400">No files uploaded yet</p>
                                     </motion.div>
                                 ) : (
                                     filteredFiles.map(file => (
@@ -950,30 +989,31 @@ const TeamPage = () => {
                                             key={file._id}
                                             variants={itemVariants}
                                             whileHover={{ y: -5 }}
-                                            className="p-4 border border-gray-200 rounded-lg hover:shadow-lg transition"
+                                            className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:shadow-lg dark:hover:shadow-gray-800 transition bg-white dark:bg-gray-800"
                                         >
                                             <div className="flex items-center gap-3 mb-3">
-                                                <div className="p-2 bg-blue-100 rounded-lg">
-                                                    {getFileIcon(file.fileType)}
+                                                <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                                                    {React.createElement(getFileIcon(file.fileType), { className: "w-5 h-5 text-black dark:text-white" })}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="font-medium text-sm truncate">{file.filename}</p>
-                                                    <p className="text-xs text-gray-500">{file.sizeFormatted}</p>
+                                                    <p className="font-medium text-sm truncate text-black dark:text-white">{file.filename}</p>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400">{file.sizeFormatted}</p>
                                                 </div>
                                             </div>
                                             <div className="flex gap-2">
                                                 <motion.button
-                                                    whileHover={{ scale: 1.1 }}
+                                                    whileHover={{ scale: 1.05 }}
                                                     whileTap={{ scale: 0.95 }}
-                                                    className="flex-1 py-1 text-xs bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition"
+                                                    onClick={() => handleDownloadFile(file.url, file.filename)}
+                                                    className="flex-1 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-black dark:text-white rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition"
                                                 >
                                                     <Download className="w-3 h-3 inline mr-1" /> Download
                                                 </motion.button>
                                                 <motion.button
-                                                    whileHover={{ scale: 1.1 }}
+                                                    whileHover={{ scale: 1.05 }}
                                                     whileTap={{ scale: 0.95 }}
                                                     onClick={() => handleDeleteFile(file._id)}
-                                                    className="flex-1 py-1 text-xs bg-red-100 text-red-600 rounded hover:bg-red-200 transition"
+                                                    className="flex-1 py-1 text-xs bg-red-100 dark:bg-red-900 text-red-600 dark:text-red-400 rounded hover:bg-red-200 dark:hover:bg-red-800 transition"
                                                 >
                                                     <Trash2 className="w-3 h-3 inline mr-1" /> Delete
                                                 </motion.button>
@@ -985,66 +1025,190 @@ const TeamPage = () => {
                         </motion.div>
                     )}
 
-                    {/* Members Tab */}
                     {activeTab === 'members' && selectedTeam && (
-                        <motion.div variants={containerVariants} className="space-y-4">
+                        <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-4">
                             <motion.button
                                 variants={itemVariants}
                                 whileHover={{ scale: 1.02 }}
                                 whileTap={{ scale: 0.98 }}
                                 onClick={() => openModal('inviteMember')}
-                                className="w-full bg-blue-500 text-white py-3 rounded-lg hover:bg-blue-600 transition flex items-center justify-center gap-2"
+                                className="w-full bg-black dark:bg-white text-white dark:text-black py-3 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 transition flex items-center justify-center gap-2 font-medium"
                             >
                                 <Plus className="w-5 h-5" /> Invite Member
                             </motion.button>
-                            <motion.div
-                                variants={itemVariants}
-                                className="bg-blue-50 border border-blue-200 p-6 rounded-xl text-center"
-                            >
-                                <p className="text-gray-600">Team: {selectedTeam.name}</p>
-                                <p className="text-2xl font-bold text-blue-600 mt-2">{selectedTeam.stats?.totalMembers || 1}</p>
-                                <p className="text-gray-500 text-sm">Active Members</p>
-                            </motion.div>
+
+                            <div className="space-y-3">
+                                {loading ? (
+                                    <div className="flex justify-center py-8">
+                                        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }}>
+                                            <Loader className="w-8 h-8 text-black dark:text-white" />
+                                        </motion.div>
+                                    </div>
+                                ) : filteredMembers.length === 0 ? (
+                                    <p className="text-center text-gray-500 dark:text-gray-400 py-8">No members in this team</p>
+                                ) : (
+                                    filteredMembers.map(member => (
+                                        <motion.div
+                                            key={member._id}
+                                            variants={itemVariants}
+                                            className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800"
+                                        >
+                                            <div className="flex justify-between items-center">
+                                                <div>
+                                                    <h4 className="font-medium text-black dark:text-white">{member.user?.firstName} {member.user?.lastName}</h4>
+                                                    <p className="text-sm text-gray-500 dark:text-gray-400">{member.user?.email}</p>
+                                                    <span className="inline-block mt-2 px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full capitalize">{member.role}</span>
+                                                    {member.status === 'suspended' && (
+                                                        <span className="inline-block ml-2 px-3 py-1 text-xs bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-full">Suspended</span>
+                                                    )}
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <motion.button
+                                                        whileHover={{ scale: 1.1 }}
+                                                        whileTap={{ scale: 0.95 }}
+                                                        onClick={() => openModal('updateMemberRole', member)}
+                                                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
+                                                    >
+                                                        <Edit className="w-5 h-5 text-black dark:text-white" />
+                                                    </motion.button>
+                                                    {member.status === 'suspended' ? (
+                                                        <motion.button
+                                                            whileHover={{ scale: 1.1 }}
+                                                            whileTap={{ scale: 0.95 }}
+                                                            onClick={() => handleReactivateMember(selectedTeam._id, member._id)}
+                                                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
+                                                        >
+                                                            <Eye className="w-5 h-5 text-green-600 dark:text-green-400" />
+                                                        </motion.button>
+                                                    ) : (
+                                                        <motion.button
+                                                            whileHover={{ scale: 1.1 }}
+                                                            whileTap={{ scale: 0.95 }}
+                                                            onClick={() => handleSuspendMember(selectedTeam._id, member._id)}
+                                                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
+                                                        >
+                                                            <EyeOff className="w-5 h-5 text-red-600 dark:text-red-400" />
+                                                        </motion.button>
+                                                    )}
+                                                    <motion.button
+                                                        whileHover={{ scale: 1.1 }}
+                                                        whileTap={{ scale: 0.95 }}
+                                                        onClick={() => handleRemoveMember(selectedTeam._id, member._id)}
+                                                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
+                                                    >
+                                                        <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
+                                                    </motion.button>
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    ))
+                                )}
+                            </div>
                         </motion.div>
                     )}
 
-                    {/* Settings Tab */}
-                    {activeTab === 'settings' && selectedTeam && (
-                        <motion.div variants={containerVariants} className="space-y-6 max-w-2xl">
-                            <motion.div
+                    {activeTab === 'invitations' && selectedTeam && (
+                        <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-4">
+                            <motion.button
                                 variants={itemVariants}
-                                className="border border-gray-200 p-6 rounded-xl"
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => openModal('bulkInvite')}
+                                className="w-full bg-black dark:bg-white text-white dark:text-black py-3 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 transition flex items-center justify-center gap-2 font-medium"
                             >
-                                <h3 className="text-lg font-bold mb-4">Subscription Plan</h3>
+                                <Plus className="w-5 h-5" /> Bulk Invite
+                            </motion.button>
+
+                            {loading ? (
+                                <div className="flex justify-center py-12">
+                                    <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }}>
+                                        <Loader className="w-8 h-8 text-black dark:text-white" />
+                                    </motion.div>
+                                </div>
+                            ) : invitations.length === 0 ? (
+                                <p className="text-center text-gray-500 dark:text-gray-400 py-8">No pending invitations</p>
+                            ) : (
+                                invitations.map(inv => (
+                                    <motion.div
+                                        key={inv._id}
+                                        variants={itemVariants}
+                                        className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800"
+                                    >
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <p className="font-medium text-black dark:text-white">{inv.email}</p>
+                                                <p className="text-sm text-gray-500 dark:text-gray-400">Role: {inv.role}</p>
+                                                <span className={`inline-block mt-2 px-3 py-1 text-xs rounded-full ${inv.status === 'accepted' ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' : 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300'}`}>
+                                                    {inv.status}
+                                                </span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                {inv.status === 'pending' && (
+                                                    <motion.button
+                                                        whileHover={{ scale: 1.1 }}
+                                                        whileTap={{ scale: 0.95 }}
+                                                        onClick={() => handleResendInvitation(selectedTeam._id, inv._id)}
+                                                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
+                                                    >
+                                                        <Copy className="w-5 h-5 text-black dark:text-white" />
+                                                    </motion.button>
+                                                )}
+                                                <motion.button
+                                                    whileHover={{ scale: 1.1 }}
+                                                    whileTap={{ scale: 0.95 }}
+                                                    onClick={() => handleCancelInvitation(selectedTeam._id, inv._id)}
+                                                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
+                                                >
+                                                    <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
+                                                </motion.button>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                ))
+                            )}
+                        </motion.div>
+                    )}
+
+                    {activeTab === 'settings' && selectedTeam && (
+                        <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-6 max-w-2xl">
+                            <motion.button
+                                variants={itemVariants}
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => openModal('teamSettings')}
+                                className="w-full bg-black dark:bg-white text-white dark:text-black py-3 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 transition flex items-center justify-center gap-2 font-medium"
+                            >
+                                <Settings className="w-5 h-5" /> Edit Settings
+                            </motion.button>
+
+                            <motion.div variants={itemVariants} className="border border-gray-200 dark:border-gray-700 p-6 rounded-xl bg-white dark:bg-gray-800">
+                                <h3 className="text-lg font-bold mb-4 text-black dark:text-white">Subscription Plan</h3>
                                 <div className="space-y-3">
                                     <div className="flex justify-between items-center">
-                                        <span className="text-gray-600">Current Plan:</span>
-                                        <span className="font-bold text-green-600 capitalize">{selectedTeam.subscription?.plan}</span>
+                                        <span className="text-gray-600 dark:text-gray-400">Current Plan:</span>
+                                        <span className="font-bold text-black dark:text-white capitalize">{selectedTeam.subscription?.plan || 'Free'}</span>
                                     </div>
                                     <div className="flex justify-between items-center">
-                                        <span className="text-gray-600">Seats Used:</span>
-                                        <span className="font-bold">{selectedTeam.subscription?.usedSeats}/{selectedTeam.subscription?.seats}</span>
+                                        <span className="text-gray-600 dark:text-gray-400">Seats Used:</span>
+                                        <span className="font-bold text-black dark:text-white">{selectedTeam.subscription?.usedSeats || 0}/{selectedTeam.subscription?.seats || 5}</span>
                                     </div>
                                     <div className="flex justify-between items-center">
-                                        <span className="text-gray-600">Status:</span>
-                                        <span className="font-bold text-green-600 capitalize">{selectedTeam.subscription?.status}</span>
+                                        <span className="text-gray-600 dark:text-gray-400">Status:</span>
+                                        <span className="font-bold text-green-600 dark:text-green-400 capitalize">{selectedTeam.subscription?.status || 'Active'}</span>
                                     </div>
                                 </div>
                             </motion.div>
 
-                            <motion.div
-                                variants={itemVariants}
-                                className="border border-gray-200 p-6 rounded-xl"
-                            >
-                                <h3 className="text-lg font-bold mb-4">Team Statistics</h3>
+                            <motion.div variants={itemVariants} className="border border-gray-200 dark:border-gray-700 p-6 rounded-xl bg-white dark:bg-gray-800">
+                                <h3 className="text-lg font-bold mb-4 text-black dark:text-white">Team Statistics</h3>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg">
-                                        <p className="text-gray-600 text-sm">Tests Passed</p>
-                                        <p className="text-2xl font-bold text-purple-600">{selectedTeam.stats?.totalTestsPassed || 0}</p>
+                                    <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                                        <p className="text-gray-600 dark:text-gray-400 text-sm">Total Members</p>
+                                        <p className="text-2xl font-bold text-black dark:text-white">{selectedTeam.stats?.totalMembers || 0}</p>
                                     </div>
-                                    <div className="bg-gradient-to-br from-red-50 to-red-100 p-4 rounded-lg">
-                                        <p className="text-gray-600 text-sm">Tests Failed</p>
-                                        <p className="text-2xl font-bold text-red-600">{selectedTeam.stats?.totalTestsFailed || 0}</p>
+                                    <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                                        <p className="text-gray-600 dark:text-gray-400 text-sm">Total Projects</p>
+                                        <p className="text-2xl font-bold text-black dark:text-white">{selectedTeam.stats?.totalProjects || 0}</p>
                                     </div>
                                 </div>
                             </motion.div>
@@ -1053,7 +1217,6 @@ const TeamPage = () => {
                 </motion.div>
             </div>
 
-            {/* Modal */}
             <AnimatePresence>
                 {showModal && (
                     <motion.div
@@ -1066,10 +1229,10 @@ const TeamPage = () => {
                             initial={{ scale: 0.95, y: 20 }}
                             animate={{ scale: 1, y: 0 }}
                             exit={{ scale: 0.95, y: 20 }}
-                            className="bg-white rounded-xl max-w-md w-full p-6 space-y-4"
+                            className="bg-white dark:bg-gray-800 rounded-xl max-w-md w-full p-6 space-y-4 border border-gray-200 dark:border-gray-700"
                         >
                             <div className="flex justify-between items-center">
-                                <h2 className="text-xl font-bold">
+                                <h2 className="text-xl font-bold text-black dark:text-white">
                                     {modalType === 'createTeam' && 'Create New Team'}
                                     {modalType === 'editTeam' && 'Edit Team'}
                                     {modalType === 'inviteMember' && 'Invite Member'}
@@ -1077,9 +1240,13 @@ const TeamPage = () => {
                                     {modalType === 'updateMemberRole' && 'Update Member Role'}
                                     {modalType === 'teamSettings' && 'Team Settings'}
                                 </h2>
-                                <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded">
-                                    <X className="w-5 h-5" />
-                                </button>
+                                <motion.button
+                                    whileHover={{ scale: 1.1 }}
+                                    onClick={() => setShowModal(false)}
+                                    className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                                >
+                                    <X className="w-5 h-5 text-black dark:text-white" />
+                                </motion.button>
                             </div>
 
                             {(modalType === 'createTeam' || modalType === 'editTeam') && (
@@ -1087,22 +1254,22 @@ const TeamPage = () => {
                                     <input
                                         type="text"
                                         placeholder="Team Name"
-                                        value={formData.teamName || ''}
+                                        defaultValue={modalType === 'editTeam' ? selectedTeam?.name : ''}
                                         onChange={(e) => setFormData({ ...formData, teamName: e.target.value })}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-black dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white"
                                     />
                                     <textarea
                                         placeholder="Team Description"
-                                        value={formData.teamDescription || ''}
+                                        defaultValue={modalType === 'editTeam' ? selectedTeam?.description : ''}
                                         onChange={(e) => setFormData({ ...formData, teamDescription: e.target.value })}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
+                                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-black dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white resize-none"
                                         rows="3"
                                     />
                                     {modalType === 'createTeam' && (
                                         <select
                                             value={formData.visibility || 'private'}
                                             onChange={(e) => setFormData({ ...formData, visibility: e.target.value })}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-black dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white"
                                         >
                                             <option value="private">Private</option>
                                             <option value="public">Public</option>
@@ -1116,19 +1283,23 @@ const TeamPage = () => {
                                     <input
                                         type="email"
                                         placeholder="Member Email"
-                                        value={formData.memberEmail || ''}
                                         onChange={(e) => setFormData({ ...formData, memberEmail: e.target.value })}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-black dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white"
                                     />
                                     <select
                                         value={formData.memberRole || 'member'}
                                         onChange={(e) => setFormData({ ...formData, memberRole: e.target.value })}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-black dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white"
                                     >
                                         <option value="viewer">Viewer</option>
-                                        <option value="member">Member</option>
-                                        <option value="admin">Admin</option>
+                                        <option value="member">Member</option>                    <option value="admin">Admin</option>
                                     </select>
+                                    <textarea
+                                        placeholder="Optional message"
+                                        onChange={(e) => setFormData({ ...formData, inviteMessage: e.target.value })}
+                                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-black dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white resize-none"
+                                        rows="2"
+                                    />
                                 </>
                             )}
 
@@ -1137,7 +1308,7 @@ const TeamPage = () => {
                             <div className="flex gap-2 pt-4">
                                 <button
                                     onClick={() => setShowModal(false)}
-                                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-black dark:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"
                                 >
                                     Cancel
                                 </button>
@@ -1149,11 +1320,11 @@ const TeamPage = () => {
                                         else if (modalType === 'editTeam') handleUpdateTeam();
                                         else if (modalType === 'inviteMember') handleInviteMember();
                                         else if (modalType === 'bulkInvite') handleBulkInviteMembers();
-                                        else if (modalType === 'updateMemberRole') handleUpdateMemberRole(selectedTeam._id, selectedTeam._id);
+                                        else if (modalType === 'updateMemberRole') handleUpdateMemberRole(selectedTeam._id, selectedMember._id);
                                         else if (modalType === 'teamSettings') handleUpdateTeamSettings();
                                     }}
                                     disabled={loading}
-                                    className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition flex items-center justify-center gap-2 disabled:opacity-70"
+                                    className="flex-1 px-4 py-2 bg-black dark:bg-white text-white dark:text-black rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 transition flex items-center justify-center gap-2 disabled:opacity-50 font-medium"
                                 >
                                     {loading ? (
                                         <>
@@ -1171,5 +1342,4 @@ const TeamPage = () => {
         </div>
     );
 };
-
 export default TeamPage;
