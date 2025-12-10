@@ -24,48 +24,25 @@ import {
 import { FcDocument, FcInvite } from 'react-icons/fc';
 import { BiEnvelope } from 'react-icons/bi';
 import { FaBook } from 'react-icons/fa';
+import { useProject } from '@/app/scripts/Project.context';
 
 const StatusBar = () => {
     const router = useRouter();
+    const { selectedProject, setSelectedProject, projects, loading: projectsLoading } = useProject();
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [dropdownOpen, setDropdownOpen] = useState(false);
-    const [projects, setProjects] = useState([]);
     const [filteredProjects, setFilteredProjects] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
-    const [selectedProject, setSelectedProject] = useState('Select Project');
     const [selectedIndex, setSelectedIndex] = useState(-1);
     const [isDarkTheme, setIsDarkTheme] = useState(false);
-    const [loading, setLoading] = useState(false);
 
     const searchInputRef = useRef(null);
     const dropdownRef = useRef(null);
 
-    // Fetch projects from API
+    // Update filtered projects when projects change
     useEffect(() => {
-        const fetchProjects = async () => {
-            setLoading(true);
-            try {
-                // Replace with your API endpoint
-                const response = await fetch('https://api.github.com/users/github/repos');
-                const data = await response.json();
-                setProjects(data);
-                setFilteredProjects(data);
-            } catch (error) {
-                console.error('Error fetching projects:', error);
-                // Fallback demo data
-                const demoProjects = [
-                    { id: 1, name: 'Project Alpha', full_name: 'user/project-alpha' },
-                    { id: 2, name: 'Project Beta', full_name: 'user/project-beta' },
-                    { id: 3, name: 'Project Gamma', full_name: 'user/project-gamma' },
-                    { id: 4, name: 'Project Delta', full_name: 'user/project-delta' },
-                ];
-                setProjects(demoProjects);
-                setFilteredProjects(demoProjects);
-            }
-            setLoading(false);
-        };
-        fetchProjects();
-    }, []);
+        setFilteredProjects(projects);
+    }, [projects]);
 
     // Focus search input when dropdown opens
     useEffect(() => {
@@ -78,7 +55,8 @@ const StatusBar = () => {
     useEffect(() => {
         const filtered = projects.filter(project =>
             project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (project.full_name && project.full_name.toLowerCase().includes(searchQuery.toLowerCase()))
+            (project.description && project.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+            (project.slug && project.slug.toLowerCase().includes(searchQuery.toLowerCase()))
         );
         setFilteredProjects(filtered);
         setSelectedIndex(-1);
@@ -116,10 +94,11 @@ const StatusBar = () => {
 
     // Handle project selection
     const handleProjectSelect = (project) => {
-        setSelectedProject(project.name);
+        setSelectedProject(project);
         setDropdownOpen(false);
         setSearchQuery('');
         setSelectedIndex(-1);
+        router.push(`/app/${project.slug}`);
     };
 
     // Close dropdown when clicking outside
@@ -157,7 +136,7 @@ const StatusBar = () => {
                     >
                         <Folder className="w-3.5 h-3.5 text-gray-700 dark:text-gray-300" />
                         <span className="text-gray-700 dark:text-gray-300 max-w-[120px] truncate">
-                            {selectedProject}
+                            {selectedProject ? selectedProject.name : 'Select Project'}
                         </span>
                         <ChevronDown className="w-3.5 h-3.5 text-gray-700 dark:text-gray-300" />
                     </button>
@@ -189,7 +168,7 @@ const StatusBar = () => {
 
                                 {/* Project List */}
                                 <div className="max-h-64 overflow-y-auto">
-                                    {loading ? (
+                                    {projectsLoading ? (
                                         <div className="p-4 text-center text-gray-500 dark:text-gray-400 text-xs">
                                             Loading projects...
                                         </div>
@@ -200,7 +179,7 @@ const StatusBar = () => {
                                     ) : (
                                         filteredProjects.map((project, index) => (
                                             <button
-                                                key={project.id}
+                                                key={project._id}
                                                 onClick={() => handleProjectSelect(project)}
                                                 className={`w-full text-left px-3 py-2 text-xs transition-colors ${index === selectedIndex
                                                     ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
@@ -208,9 +187,9 @@ const StatusBar = () => {
                                                     }`}
                                             >
                                                 <div className="font-medium">{project.name}</div>
-                                                {project.full_name && (
+                                                {project.description && (
                                                     <div className="text-gray-500 dark:text-gray-400 text-[10px] mt-0.5">
-                                                        {project.full_name}
+                                                        {project.description}
                                                     </div>
                                                 )}
                                             </button>

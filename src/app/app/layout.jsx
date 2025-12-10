@@ -1,7 +1,6 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import StatusBar from "../components/modules/Statusbar";
-import Tooltip from "../components/utils/Tooltip.util";
-import { TooltipProvider } from "../scripts/Tooltip.context";
+import { ProjectProvider } from "../scripts/Project.context";
 
 
 const geistSans = Geist({
@@ -25,8 +24,10 @@ export default function RootLayout({ children }) {
             <body
                 className={`${geistSans.variable} ${geistMono.variable} antialiased`}
             >
-                <StatusBar />
+                <ProjectProvider>
+                    <StatusBar />
                     {children}
+                </ProjectProvider>
             </body>
         </html>
     );
