@@ -245,7 +245,7 @@ const StatusBar = () => {
                     </button>
 
                     <button
-                        onClick={() => router.push('/app/teams')}
+                        onClick={() => router.push('/app/projects')}
                         className="flex items-center gap-1.5 px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors text-gray-700 dark:text-gray-300"
                     >
                         <Folder className="w-3.5 h-3.5" />
