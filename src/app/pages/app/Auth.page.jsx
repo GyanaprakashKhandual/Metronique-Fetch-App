@@ -129,6 +129,17 @@ export default function AuthPage() {
 
       if (data.success) {
         console.log('[Auth] Registration successful:', formData.email);
+
+        // Save tokens to localStorage if provided
+        if (data.data?.accessToken) {
+          localStorage.setItem('accessToken', data.data.accessToken);
+          console.log('[Auth] Access token saved');
+        }
+        if (data.data?.refreshToken) {
+          localStorage.setItem('refreshToken', data.data.refreshToken);
+          console.log('[Auth] Refresh token saved');
+        }
+
         setRegistrationEmail(formData.email);
         setShowEmailVerification(true);
         showAlert({ type: 'success', message: 'Account created successfully! Please verify your email.' });
@@ -169,6 +180,17 @@ export default function AuthPage() {
 
       if (data.success) {
         console.log('[Auth] Login successful:', formData.email);
+
+        // Save tokens to localStorage
+        if (data.data?.accessToken) {
+          localStorage.setItem('accessToken', data.data.accessToken);
+          console.log('[Auth] Access token saved');
+        }
+        if (data.data?.refreshToken) {
+          localStorage.setItem('refreshToken', data.data.refreshToken);
+          console.log('[Auth] Refresh token saved');
+        }
+
         showAlert({ type: 'success', message: 'Welcome back! Redirecting...' });
 
         setTimeout(() => {
@@ -264,10 +286,6 @@ export default function AuthPage() {
     console.log(`[Auth] Initiating ${provider} OAuth`);
     window.location.href = `${API_BASE_URL}/${provider}`;
   };
-
-
-  localStorage.setItem('accessToken', loginResponse.data.accessToken);
-  localStorage.setItem('refreshToken', loginResponse.data.refreshToken);
 
   const switchMode = (newMode) => {
     setMode(newMode);

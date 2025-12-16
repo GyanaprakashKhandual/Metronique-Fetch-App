@@ -1,6 +1,5 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import StatusBar from "../components/modules/Statusbar";
-import { ProjectProvider } from "../scripts/Project.context";
 
 
 const geistSans = Geist({
@@ -24,10 +23,8 @@ export default function RootLayout({ children }) {
             <body
                 className={`${geistSans.variable} ${geistMono.variable} antialiased`}
             >
-                <ProjectProvider>
                     <StatusBar />
                     {children}
-                </ProjectProvider>
             </body>
         </html>
     );
