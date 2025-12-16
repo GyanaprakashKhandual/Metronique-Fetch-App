@@ -265,6 +265,10 @@ export default function AuthPage() {
     window.location.href = `${API_BASE_URL}/${provider}`;
   };
 
+
+  localStorage.setItem('accessToken', loginResponse.data.accessToken);
+  localStorage.setItem('refreshToken', loginResponse.data.refreshToken);
+
   const switchMode = (newMode) => {
     setMode(newMode);
     setFormData({ firstName: '', lastName: '', email: '', password: '', confirmPassword: '', username: '' });
